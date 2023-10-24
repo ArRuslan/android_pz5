@@ -28,16 +28,17 @@ import java.util.ArrayList;
 import java.util.Date;
 
 import me.ruslan.task5.adapters.NotesListAdapter;
+import me.ruslan.task5.db.DBHelper;
 import me.ruslan.task5.models.Note;
 
 
 public class MainActivity extends AppCompatActivity {
     private NotesListAdapter adapter;
-    public static ArrayList<Note> notes = new ArrayList<>();
     private String searchQuery = "";
     private int filterPriority = 7;
     private String savedTheme;
     private SharedPreferences prefs;
+    private DBHelper db;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,20 +47,22 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        db = new DBHelper(this);
+
         ListView notes_list = findViewById(R.id.notes_list);
 
-        adapter = new NotesListAdapter(notes, getApplicationContext(), prefs);
+        adapter = new NotesListAdapter(db.getNotes(), getApplicationContext(), prefs);
         notes_list.setAdapter(adapter);
 
         notes_list.setOnItemClickListener((adapterView, view, i, l) -> {
             Intent intent = new Intent(MainActivity.this, NoteEditActivity.class);
             intent.putExtra("note", adapter.getFiltered(i));
-            intent.putExtra("real_index", adapter.getRealIndex(i));
             startActivity(intent);
         });
 
         notes_list.setOnItemLongClickListener((adapterView, view, i, l) -> {
-            showNoteManageDialog(i);
+            showNoteManageDialog(adapter.getFiltered(i));
             return true;
         });
     }
@@ -67,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        adapter.notifyDataSetChanged();
+        adapter.setNotes(db.getNotes());
 
         if(!prefs.getString("theme", "light").equals(savedTheme))
             restart();
@@ -84,20 +87,21 @@ public class MainActivity extends AppCompatActivity {
         startActivity(new Intent(MainActivity.this, MainActivity.class));
     }
 
-    public void pickNoteImage(int noteIdx) {
+    public void pickNoteImage(int noteId) {
         Intent intent = new Intent();
         intent.setType("image/*");
         intent.setAction(Intent.ACTION_GET_CONTENT);
-        startActivityForResult(Intent.createChooser(intent, getString(R.string.int_select_file)), 1000+noteIdx);
+        startActivityForResult(Intent.createChooser(intent, getString(R.string.int_select_file)), 1000+noteId);
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (resultCode == Activity.RESULT_OK && requestCode >= 1000 && requestCode < 1000+adapter.filteredSize()) {
-            Note note = adapter.getFiltered(requestCode-1000);
-            adapter.notifyDataSetChanged();
+        if (resultCode == Activity.RESULT_OK && requestCode >= 1000) {
+            Note note = db.getNote(requestCode-1000);
+            if(note == null) return;
+
             File outFile = new File(getFilesDir(), System.currentTimeMillis() + ".png");
             try {
                 copyFile(data.getData(), outFile);
@@ -105,6 +109,9 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(getApplicationContext(), getString(R.string.error)+e.getMessage(), Toast.LENGTH_LONG).show();
             }
             note.setImage(outFile.getAbsolutePath());
+            db.updateNote(note);
+            adapter.setNote(note);
+            adapter.notifyDataSetChanged();
         }
     }
 
@@ -154,17 +161,7 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    public static void updateNote(int idx, String title, String text) {
-        Note note = notes.get(idx);
-        if(title != null)
-            note.setTitle(title);
-        if(text != null)
-            note.setText(text);
-    }
-
-    private void showNoteManageDialog(int i) {
-        Note note = adapter.getFiltered(i);
-
+    private void showNoteManageDialog(Note note) {
         AlertDialog.Builder noteDialog = new AlertDialog.Builder(MainActivity.this);
         noteDialog.setTitle(String.format(getString(R.string.dialog_manage_note_s), note.getTitle()));
 
@@ -186,7 +183,7 @@ public class MainActivity extends AppCompatActivity {
 
         AlertDialog dialog = noteDialog.create();
         iconBtn.setOnClickListener(view1 -> {
-            pickNoteImage(i);
+            pickNoteImage(note.getId());
             dialog.dismiss();
         });
         priorityBtn.setOnClickListener(view1 -> {
@@ -194,8 +191,8 @@ public class MainActivity extends AppCompatActivity {
             dialog.dismiss();
         });
         deleteBtn.setOnClickListener(view1 -> {
-            adapter.removeFiltered(i);
-            adapter.notifyDataSetChanged();
+            db.deleteNote(note);
+            adapter.setNotes(db.getNotes());
             dialog.dismiss();
         });
 
@@ -235,6 +232,7 @@ public class MainActivity extends AppCompatActivity {
             else if(view == highBtn)
                 note.setPriority(4);
 
+            db.updateNote(note);
             adapter.notifyDataSetChanged();
             dialog.dismiss();
         };
@@ -321,7 +319,8 @@ public class MainActivity extends AppCompatActivity {
         newNote.setView(noteTitle);
 
         newNote.setPositiveButton(R.string.dialog_create_btn_create, (dialog, whichButton) -> {
-            adapter.addNote(new Note(noteTitle.getText().toString(), null, new SimpleDateFormat("HH:mm").format(new Date()), 0, null));
+            db.addNote(new Note(noteTitle.getText().toString(), null, new SimpleDateFormat("HH:mm").format(new Date()), 0, null));
+            adapter.setNotes(db.getNotes());
             adapter.notifyDataSetChanged();
         });
 

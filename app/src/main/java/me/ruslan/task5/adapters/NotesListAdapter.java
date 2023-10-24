@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,13 +15,14 @@ import android.widget.TextView;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import me.ruslan.task5.R;
 import me.ruslan.task5.SettingsActivity;
 import me.ruslan.task5.models.Note;
 
 public class NotesListAdapter extends ArrayAdapter<Note> implements Filterable {
-    private ArrayList<Note> dataSet;
+    private HashMap<Integer, Note> dataSet = new HashMap<>();
     private ArrayList<Note> dataSetFiltered;
     private static SearchParams search = new SearchParams("", 7);
     private SharedPreferences prefs;
@@ -68,8 +68,18 @@ public class NotesListAdapter extends ArrayAdapter<Note> implements Filterable {
     public NotesListAdapter(ArrayList<Note> data, Context context, SharedPreferences prefs) {
         super(context, R.layout.notes_list, data);
         dataSetFiltered = data;
-        dataSet = new ArrayList<>(data);
+        for(Note note : data) {
+            dataSet.put(note.getId(), note);
+        }
         this.prefs = prefs;
+    }
+
+    public void setNotes(ArrayList<Note> data) {
+        dataSet.clear();
+        for(Note note : data) {
+            dataSet.put(note.getId(), note);
+        }
+        notifyDataSetChanged(true);
     }
 
     private Drawable getPriorityDrawable(int priority) {
@@ -134,14 +144,14 @@ public class NotesListAdapter extends ArrayAdapter<Note> implements Filterable {
         int priority = search.getPriority();
         if(search.isDefault()) {
             dataSetFiltered.clear();
-            dataSetFiltered.addAll(dataSet);
+            dataSetFiltered.addAll(dataSet.values());
             notifyDataSetChanged(false);
             return;
         }
 
         ArrayList<Note> result = new ArrayList<>();
 
-        for (Note note : dataSet) {
+        for (Note note : dataSet.values()) {
             if (!query.isEmpty() && (!note.getTitle().contains(query) && !note.getText().contains(query)))
                 continue;
             if (priority != 0 && priority != 7 && ((note.getPriority() & priority) != note.getPriority()))
@@ -168,22 +178,7 @@ public class NotesListAdapter extends ArrayAdapter<Note> implements Filterable {
         return dataSetFiltered.get(idx);
     }
 
-    public void removeFiltered(int idx) {
-        Note note = dataSetFiltered.get(idx);
-        dataSetFiltered.remove(note);
-        dataSet.remove(note);
-    }
-
-    public int filteredSize() {
-        return dataSetFiltered.size();
-    }
-
-    public int getRealIndex(int idx) {
-        Note note = dataSetFiltered.get(idx);
-        return dataSet.indexOf(note);
-    }
-
-    public void addNote(Note note) {
-        dataSet.add(note);
+    public void setNote(Note note) {
+        dataSet.put(note.getId(), note);
     }
 }
